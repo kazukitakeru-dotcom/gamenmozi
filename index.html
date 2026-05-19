@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="掲示板">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="電子掲示板 - 文字を大きく表示するPWAアプリ">
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Apple Touch Icons -->
+  <link rel="apple-touch-icon" href="icons/01.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/01.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/01.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/01.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+
+  <title>電子掲示板</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=M+PLUS+1p:wght@400;700;800;900&family=M+PLUS+Rounded+1c:wght@400;700;800;900&family=Zen+Antique&family=Yusei+Magic&family=Rampart+One&family=Kaisei+Decol:wght@400;700&family=RocknRoll+One&family=Stick&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #000000;
+      --text: #ffffff;
+      --accent: #00ffff;
+      --panel-bg: rgba(10,10,20,0.95);
+      --border: rgba(255,255,255,0.12);
+      --font: 'Noto Sans JP', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      touch-action: none;
+      user-select: none;
+    }
+
+    /* ── Display Area ── */
+    #display {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      transition: background 0.4s;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    #display-text {
+      text-align: center;
+      line-height: 1.1;
+      word-break: break-all;
+      max-width: 95vw;
+      max-height: 95vh;
+      overflow: hidden;
+      transition: color 0.3s, font-family 0.3s, text-shadow 0.4s;
+      white-space: pre-wrap;
+    }
+
+    /* ── Neon effects ── */
+    .neon-off  { text-shadow: none; }
+    .neon-soft { text-shadow: 0 0 10px var(--text), 0 0 20px var(--text), 0 0 40px var(--text); }
+    .neon-hard {
+      text-shadow:
+        0 0 5px  #fff,
+        0 0 10px #fff,
+        0 0 20px var(--text),
+        0 0 40px var(--text),
+        0 0 80px var(--text),
+        0 0 120px var(--text);
+    }
+    .neon-flicker {
+      animation: flicker 2.5s infinite alternate;
+    }
+    @keyframes flicker {
+      0%,18%,20%,50.1%,60%,65.1%,80%,90.1%,92%{ opacity:1; }
+      19%,49.9%,50%,60.9%,65%,80.9%,91%       { opacity:0.5; }
+    }
+    .neon-pulse {
+      animation: pulse-glow 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse-glow {
+      0%,100% { text-shadow: 0 0 5px var(--text),0 0 20px var(--text),0 0 50px var(--text); }
+      50%     { text-shadow: 0 0 10px var(--text),0 0 40px var(--text),0 0 100px var(--text),0 0 150px var(--text); }
+    }
+    .neon-rgb {
+      animation: rgb-shift 3s linear infinite;
+    }
+    @keyframes rgb-shift {
+      0%   { text-shadow: 0 0 20px #ff0040,0 0 60px #ff0040; color:#ff0040; }
+      33%  { text-shadow: 0 0 20px #00ff88,0 0 60px #00ff88; color:#00ff88; }
+      66%  { text-shadow: 0 0 20px #0088ff,0 0 60px #0088ff; color:#0088ff; }
+      100% { text-shadow: 0 0 20px #ff0040,0 0 60px #ff0040; color:#ff0040; }
+    }
+
+    /* ── Slide-up panel ── */
+    #panel-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 10;
+    }
+    #panel-overlay.open { opacity: 1; pointer-events: all; }
+
+    #panel {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: var(--panel-bg);
+      border-top: 1px solid var(--border);
+      border-radius: 20px 20px 0 0;
+      padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+      z-index: 20;
+      max-height: 88vh;
+      overflow-y: auto;
+    }
+    #panel.open { transform: translateY(0); }
+
+    .panel-handle {
+      width: 36px; height: 4px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 2px;
+      margin: 0 auto 16px;
+    }
+
+    /* ── Textarea ── */
+    #text-input {
+      width: 100%;
+      min-height: 90px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 17px;
+      padding: 12px;
+      resize: none;
+      outline: none;
+      margin-bottom: 16px;
+    }
+    #text-input:focus { border-color: var(--accent); }
+
+    /* ── Section ── */
+    .section-label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 8px;
+      margin-top: 14px;
+    }
+
+    /* ── Color swatches ── */
+    .swatch-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .swatch {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .swatch.active { border-color: white; transform: scale(1.2); }
+    .swatch:active { transform: scale(0.9); }
+
+    /* custom color input */
+    .custom-color-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .custom-color-row input[type=color] {
+      width: 40px; height: 40px;
+      border: none; border-radius: 50%;
+      padding: 0; cursor: pointer;
+      background: none;
+    }
+    .custom-color-row span { font-size: 13px; color: rgba(255,255,255,0.6); }
+
+    /* ── Font picker ── */
+    .font-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+    .font-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 8px 6px;
+      font-size: 14px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .font-btn.active { background: rgba(255,255,255,0.18); border-color: var(--accent); }
+
+    /* ── Effect picker ── */
+    .effect-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .effect-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 8px 4px;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .effect-btn.active { background: rgba(255,255,255,0.18); border-color: var(--accent); }
+
+    /* ── BG picker ── */
+    .bg-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .bg-btn {
+      height: 36px;
+      border-radius: 10px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .bg-btn.active { border-color: white; transform: scale(0.95); }
+
+    /* ── FAB ── */
+    #fab {
+      position: fixed;
+      right: calc(18px + env(safe-area-inset-right));
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #000;
+      font-size: 26px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 0 16px var(--accent), 0 4px 16px rgba(0,0,0,0.4);
+      z-index: 5;
+      border: none;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    #fab:active { transform: scale(0.9); }
+
+    /* ── Hint text ── */
+    #hint {
+      position: fixed;
+      bottom: calc(20px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.25);
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 3;
+      white-space: nowrap;
+      transition: opacity 0.4s;
+    }
+
+    /* Scrollbar */
+    #panel::-webkit-scrollbar { width: 4px; }
+    #panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- Display -->
+<div id="display">
+  <div id="display-text">ここをタップして編集</div>
+</div>
+
+<div id="hint">✏️ 右下ボタンで設定</div>
+
+<!-- FAB -->
+<button id="fab" aria-label="設定を開く">✏️</button>
+
+<!-- Overlay -->
+<div id="panel-overlay" id="panel-overlay"></div>
+
+<!-- Panel -->
+<div id="panel" role="dialog" aria-modal="true" aria-label="設定パネル">
+  <div class="panel-handle"></div>
+
+  <!-- テキスト入力 -->
+  <div class="section-label">表示するテキスト</div>
+  <textarea id="text-input" placeholder="ここに文字を入力…" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+
+  <!-- 文字色 -->
+  <div class="section-label">文字の色</div>
+  <div class="swatch-row" id="text-swatches"></div>
+  <div class="custom-color-row">
+    <input type="color" id="text-color-custom" value="#ffffff">
+    <span>カスタムカラー</span>
+  </div>
+
+  <!-- 背景色 -->
+  <div class="section-label">背景</div>
+  <div class="bg-grid" id="bg-btns"></div>
+  <div class="custom-color-row" style="margin-top:8px">
+    <input type="color" id="bg-color-custom" value="#000000">
+    <span>カスタム背景色</span>
+  </div>
+
+  <!-- フォント -->
+  <div class="section-label">フォント</div>
+  <div class="font-grid" id="font-btns"></div>
+
+  <!-- エフェクト -->
+  <div class="section-label">光・エフェクト</div>
+  <div class="effect-grid" id="effect-btns"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+const state = {
+  text: '',
+  textColor: '#ffffff',
+  bg: '#000000',
+  font: "'Noto Sans JP', sans-serif",
+  effect: 'neon-off',
+};
+
+// ─────────────────────────────────────────────
+// Elements
+// ─────────────────────────────────────────────
+const display      = document.getElementById('display');
+const displayText  = document.getElementById('display-text');
+const panel        = document.getElementById('panel');
+const overlay      = document.getElementById('panel-overlay');
+const fab          = document.getElementById('fab');
+const hint         = document.getElementById('hint');
+const textInput    = document.getElementById('text-input');
+const textColorCustom = document.getElementById('text-color-custom');
+const bgColorCustom   = document.getElementById('bg-color-custom');
+
+// ─────────────────────────────────────────────
+// Data
+// ─────────────────────────────────────────────
+const textColors = [
+  '#ffffff','#000000','#ff3366','#ff9900','#ffee00',
+  '#00ff88','#00ccff','#cc66ff','#ff66cc','#aaffee',
+];
+
+const bgPresets = [
+  { label:'黒',    value:'#000000' },
+  { label:'白',    value:'#ffffff' },
+  { label:'紺',    value:'#0a0a2e' },
+  { label:'深緑',  value:'#001a0d' },
+  { label:'赤',    value:'#1a0000' },
+  { label:'グレー',value:'#1a1a1a' },
+  { label:'桜',    value:'#1a000f' },
+  { label:'宇宙',  value:'linear-gradient(135deg,#0a0a2e,#1a0033)' },
+];
+
+const fonts = [
+  { label:'ゴシック',    value:"'Noto Sans JP', sans-serif" },
+  { label:'明朝',        value:"'Noto Serif JP', serif" },
+  { label:'M PLUS',      value:"'M PLUS 1p', sans-serif" },
+  { label:'丸ゴシック',  value:"'M PLUS Rounded 1c', sans-serif" },
+  { label:'アンティーク',value:"'Zen Antique', serif" },
+  { label:'遊星魔法',    value:"'Yusei Magic', sans-serif" },
+  { label:'ランパート',  value:"'Rampart One', cursive" },
+  { label:'解体',        value:"'Kaisei Decol', serif" },
+  { label:'ロックン',    value:"'RocknRoll One', sans-serif" },
+  { label:'スティック',  value:"'Stick', sans-serif" },
+];
+
+const effects = [
+  { label:'なし',       value:'neon-off'     },
+  { label:'ソフト発光', value:'neon-soft'    },
+  { label:'ネオン',     value:'neon-hard'    },
+  { label:'点滅',       value:'neon-hard neon-flicker' },
+  { label:'パルス',     value:'neon-pulse'   },
+  { label:'RGB虹',      value:'neon-rgb'     },
+];
+
+// ─────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────
+function render() {
+  // Text
+  displayText.textContent = state.text || 'ここをタップして編集';
+  hint.style.opacity = state.text ? '0' : '1';
+
+  // Color
+  displayText.style.color = state.effect === 'neon-rgb' ? '' : state.textColor;
+  document.documentElement.style.setProperty('--text', state.textColor);
+
+  // BG
+  if (state.bg.startsWith('linear-gradient')) {
+    display.style.background = state.bg;
+  } else {
+    display.style.background = state.bg;
+  }
+
+  // Font
+  displayText.style.fontFamily = state.font;
+  document.documentElement.style.setProperty('--font', state.font);
+
+  // Effect
+  displayText.className = state.effect;
+
+  // Font size — fill screen
+  fitText();
+}
+
+function fitText() {
+  const text = state.text || 'ここをタップして編集';
+  const lines = text.split('\n').length;
+  const maxChars = Math.max(...text.split('\n').map(l => l.length));
+  const chars = Math.max(maxChars, 1);
+
+  const vw = window.innerWidth  * 0.92;
+  const vh = window.innerHeight * 0.88;
+
+  // Estimate size
+  let size = Math.min(vw / chars * 1.6, vh / lines * 0.85);
+  size = Math.max(16, Math.min(size, 320));
+  displayText.style.fontSize = size + 'px';
+}
+
+// ─────────────────────────────────────────────
+// Build UI
+// ─────────────────────────────────────────────
+function buildSwatches() {
+  const row = document.getElementById('text-swatches');
+  textColors.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'swatch' + (c === state.textColor ? ' active' : '');
+    s.style.background = c;
+    if (c === '#ffffff') s.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.3)';
+    s.addEventListener('click', () => {
+      state.textColor = c;
+      textColorCustom.value = c;
+      row.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'));
+      s.classList.add('active');
+      render();
+    });
+    row.appendChild(s);
+  });
+}
+
+function buildBgBtns() {
+  const grid = document.getElementById('bg-btns');
+  bgPresets.forEach(p => {
+    const b = document.createElement('div');
+    b.className = 'bg-btn' + (p.value === state.bg ? ' active' : '');
+    b.style.background = p.value;
+    if (p.value === '#ffffff') b.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.2)';
+    b.title = p.label;
+    b.addEventListener('click', () => {
+      state.bg = p.value;
+      bgColorCustom.value = p.value.startsWith('#') ? p.value : '#0a0a2e';
+      grid.querySelectorAll('.bg-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      render();
+    });
+    grid.appendChild(b);
+  });
+}
+
+function buildFontBtns() {
+  const grid = document.getElementById('font-btns');
+  fonts.forEach(f => {
+    const b = document.createElement('div');
+    b.className = 'font-btn' + (f.value === state.font ? ' active' : '');
+    b.style.fontFamily = f.value;
+    b.textContent = f.label;
+    b.addEventListener('click', () => {
+      state.font = f.value;
+      grid.querySelectorAll('.font-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      render();
+    });
+    grid.appendChild(b);
+  });
+}
+
+function buildEffectBtns() {
+  const grid = document.getElementById('effect-btns');
+  effects.forEach(e => {
+    const b = document.createElement('div');
+    b.className = 'effect-btn' + (e.value === state.effect ? ' active' : '');
+    b.textContent = e.label;
+    b.addEventListener('click', () => {
+      state.effect = e.value;
+      grid.querySelectorAll('.effect-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      render();
+    });
+    grid.appendChild(b);
+  });
+}
+
+// ─────────────────────────────────────────────
+// Panel open/close
+// ─────────────────────────────────────────────
+function openPanel() {
+  panel.classList.add('open');
+  overlay.classList.add('open');
+  fab.style.display = 'none';
+  hint.style.opacity = '0';
+  textInput.focus();
+}
+function closePanel() {
+  panel.classList.remove('open');
+  overlay.classList.remove('open');
+  fab.style.display = 'flex';
+  textInput.blur();
+  render();
+}
+
+fab.addEventListener('click', openPanel);
+overlay.addEventListener('click', closePanel);
+display.addEventListener('click', (e) => {
+  if (!panel.classList.contains('open')) openPanel();
+});
+
+// ─────────────────────────────────────────────
+// Text input
+// ─────────────────────────────────────────────
+textInput.addEventListener('input', () => {
+  state.text = textInput.value;
+  render();
+});
+
+// ─────────────────────────────────────────────
+// Custom colors
+// ─────────────────────────────────────────────
+textColorCustom.addEventListener('input', () => {
+  state.textColor = textColorCustom.value;
+  document.querySelectorAll('#text-swatches .swatch').forEach(x => x.classList.remove('active'));
+  render();
+});
+bgColorCustom.addEventListener('input', () => {
+  state.bg = bgColorCustom.value;
+  document.querySelectorAll('#bg-btns .bg-btn').forEach(x => x.classList.remove('active'));
+  render();
+});
+
+// ─────────────────────────────────────────────
+// Resize / orientation
+// ─────────────────────────────────────────────
+window.addEventListener('resize', fitText);
+window.addEventListener('orientationchange', () => setTimeout(fitText, 300));
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+buildSwatches();
+buildBgBtns();
+buildFontBtns();
+buildEffectBtns();
+render();
+
+// ─────────────────────────────────────────────
+// Service Worker
+// ─────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
