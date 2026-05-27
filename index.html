@@ -439,18 +439,31 @@ function render() {
 }
 
 function fitText() {
-  const text = state.text || 'ここをタップして編集';
-  const lines = text.split('\n').length;
-  const maxChars = Math.max(...text.split('\n').map(l => l.length));
-  const chars = Math.max(maxChars, 1);
+  const availW = window.innerWidth  * 0.92;
+  const availH = window.innerHeight * 0.90;
 
-  const vw = window.innerWidth  * 0.92;
-  const vh = window.innerHeight * 0.88;
+  // 幅を固定してバイナリサーチで収まる最大フォントサイズを探す
+  displayText.style.width     = availW + 'px';
+  displayText.style.maxWidth  = 'none';
+  displayText.style.maxHeight = 'none';
+  displayText.style.overflow  = 'visible';
 
-  // Estimate size
-  let size = Math.min(vw / chars * 1.6, vh / lines * 0.85);
-  size = Math.max(16, Math.min(size, 320));
-  displayText.style.fontSize = size + 'px';
+  let lo = 10, hi = 600;
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) / 2;
+    displayText.style.fontSize = mid + 'px';
+    if (displayText.scrollHeight <= availH) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  displayText.style.fontSize  = Math.floor(lo) + 'px';
+  displayText.style.width     = '';
+  displayText.style.maxWidth  = '95vw';
+  displayText.style.maxHeight = '95vh';
+  displayText.style.overflow  = 'hidden';
 }
 
 // ─────────────────────────────────────────────

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bulletin-board-v1';
+const CACHE_NAME = 'bulletin-board-v2';
 const ASSETS = [
   './',
   './index.html',
